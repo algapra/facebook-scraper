@@ -47,12 +47,12 @@ logger = logging.getLogger(__name__)
 class FacebookScraper:
     """Class for creating FacebookScraper Iterators"""
 
-    base_url = FB_MOBILE_BASE_URL
+    base_url = FB_BASE_URL
     default_headers = {
         "Accept": "*/*",
         "Connection": "keep-alive",
         "Accept-Encoding": "gzip,deflate",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/603.3.8 (KHTML, like Gecko) Version/10.1.2 Safari/603.3.8",
     }
     have_checked_locale = False
 
@@ -757,10 +757,10 @@ class FacebookScraper:
         except:
             result["about"] = None
 
-        try:
-            url = members.find("a", first=True).attrs.get("href")
-            logger.debug(f"Requesting page from: {url}")
+        url = members.find("a", first=True).attrs.get("href")
+        logger.debug(f"Requesting page from: {url}")
 
+        try:
             resp = self.get(url).html
             url = resp.find("a[href*='listType=list_admin_moderator']", first=True)
             if kwargs.get("admins", True):
@@ -959,10 +959,9 @@ class FacebookScraper:
     def login(self, email: str, password: str):
         response = self.get(self.base_url)
 
-        datr_cookie = re.search('(?<=_js_datr",")[^"]+', response.html.html)
-        if datr_cookie:
-            cookie_value = datr_cookie.group()
-            self.session.cookies.set('datr', cookie_value)
+        cookies_values = re.findall(r'js_datr","([^"]+)', response.html.html)
+        if len(cookies_values) == 1:
+            self.session.cookies.set("datr", cookies_values[0])
 
         response = self.submit_form(
             response, {"email": email, "pass": password, "_fb_noscript": None}
@@ -1128,6 +1127,17 @@ class FacebookScraper:
             group_id = self.find_group_id(button_id, r.text)
             try:
                 yield self.get_group_info(group_id)
+            except AttributeError:
+                continue
+
+    def get_profile_by_searching(self, username: str, **kwargs):
+        profile_search_url = utils.urljoin(FB_BASE_URL, f"search/people/?q={username}")
+        response = self.get(profile_search_url)
+        for profile_element in response.html.find('user_id'):
+            profile_id = profile_element.attrs.get("user_id", "").split(":")[-1]
+
+            try:
+                yield self.get_profile(profile_id)
             except AttributeError:
                 continue
 
